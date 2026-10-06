@@ -1,0 +1,33 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      # build.py runs four faces; each holds a whole Source Han super OTC in memory
+      - run: nix build .#default -L --max-jobs 2
+      - name: Package
+        run: |
+          mkdir dist
+          cp result/share/fonts/opentype/*.otf result/share/doc/kyuji-fonts/OFL.txt dist/
+          cp kyuji-font.user.js dist/
+          (cd dist && zip -9 ../kyuji-fonts.zip *.otf OFL.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kyuji-fonts
+          path: kyuji-fonts.zip
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" kyuji-fonts.zip dist/kyuji-font.user.js --generate-notes
