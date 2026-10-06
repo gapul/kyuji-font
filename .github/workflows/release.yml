@@ -14,8 +14,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@main
-      # build.py runs four faces; each holds a whole Source Han super OTC in memory
-      - run: nix build .#default -L --max-jobs 2
+      # Each face takes ~1.5 GB while building; private-repo runners have 7 GB,
+      # and four at once got the job killed. Build one face at a time.
+      - run: nix build .#default -L --option max-jobs 1
       - name: Package
         run: |
           mkdir dist
