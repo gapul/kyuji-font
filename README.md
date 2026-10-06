@@ -25,6 +25,8 @@ Two font families in OpenType CFF (.otf) format, each provided in Regular and Bo
 - 寧 has no target glyph in Source Han and is left unchanged.
 - Word rules match without word boundaries; entries that misfire were dropped (e.g., 日食 in 毎日食べた, 月食, 一丁 in 一丁目).
 - If a page names only Latin fonts (e.g. font-family: Arial), the browser renders kanji with the operating system's fallback font, so they are not converted.
+- Kyuji has only Regular and Bold, so very light or very heavy page fonts get Regular or Bold kanji.
+- Pages that use only generic families (serif/sans-serif) are drawn entirely in the browser's default fonts (which the Browser Setup step sets to Kyuji).
 
 ## Installation
 
@@ -37,9 +39,12 @@ Two font families in OpenType CFF (.otf) format, each provided in Regular and Bo
 ## Browser Setup
 
 1. **Default fonts:** Set the browser's default Japanese fonts (serif → Kyuji Mincho, sans-serif → Kyuji Gothic) for pages using generic font families.
-2. **Userscript:** Install `kyuji-font.user.js` in a userscript manager (Tampermonkey, Violentmonkey). It adds `@font-face` rules that re-point common Japanese font names (Hiragino, Yu Gothic/Mincho, Meiryo, MS Gothic/Mincho, Noto Sans/Serif JP, Source Han, BIZ UD, IPAex, etc.) to the locally installed Kyuji fonts via `local()`. Icon fonts and page serif/sans designations are preserved. The script does not download external resources.
-
-Verified on macOS in Chrome and Firefox with the fonts installed and the userscript active, horizontal and vertical text.
+2. **Userscript:** Install `kyuji-font.user.js` in a userscript manager (Tampermonkey, Violentmonkey). The userscript (v0.2.0) keeps the page's own fonts and draws only the affected kanji from the Kyuji fonts: the kanji in `data/chars.tsv` plus every kanji appearing in `data/words.tsv` (789 characters). Word-rule kanji must come from the same font or the contextual rule cannot see its neighbour, so some unchanged kanji (e.g. 明, 論) are also drawn by Kyuji.
+   - **How:** It adds `FontFace` entries under the page's own family names, limited with `unicode-range` to those kanji.
+   - **Installed system fonts** (Hiragino, Yu Gothic/Mincho, Meiryo, MS Gothic/Mincho, Osaka, IPAex): Defining a face under an installed font's name hides that font, so the script first re-adds the original faces by PostScript name, split into weight bands, and adds the Kyuji kanji in the same bands. macOS PostScript names were read from CoreText; Windows names are the commonly documented ones and have not been verified.
+   - **Web fonts the page declares** (found through `document.fonts`): The script adds a Kyuji face with the same weight/style/stretch descriptors as each of the page's faces.
+   - Families not in that list and not declared by the page are left untouched.
+   - **Verification:** In Chrome, `CSS.getPlatformFontsForNode` (DevTools protocol) reported e.g. for a Hiragino Mincho page "Hiragino Mincho ProN 5 glyphs, Kyuji Mincho 3 glyphs" for 国学の校舎、です, and for a page web font only the affected kanji came from Kyuji.
 
 ## Building from Source
 

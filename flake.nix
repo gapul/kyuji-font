@@ -7,7 +7,7 @@
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
       forAll = f: nixpkgs.lib.genAttrs systems (s: f nixpkgs.legacyPackages.${s});
-      version = "0.1.0";
+      version = "0.2.0";
     in
     {
       packages = forAll (pkgs:
@@ -24,7 +24,7 @@
           };
           src = pkgs.lib.fileset.toSource {
             root = ./.;
-            fileset = pkgs.lib.fileset.unions [ ./build.py ./check.py ./data ];
+            fileset = pkgs.lib.fileset.unions [ ./build.py ./check.py ./gen_userscript.py ./kyuji-font.user.js ./data ];
           };
           face = name: f: pkgs.runCommand name { nativeBuildInputs = [ python ]; } ''
             mkdir -p $out/share/fonts/opentype
@@ -41,6 +41,8 @@
               install -Dm644 ${./OFL.txt} $out/share/doc/kyuji-fonts/OFL.txt
               PATH=${pkgs.harfbuzz.dev}/bin:$PATH ${python}/bin/python3 ${src}/check.py \
                 $out/share/fonts/opentype/*.otf
+              # the userscript's kanji list must follow data/
+              ${python}/bin/python3 ${src}/gen_userscript.py --check
             '';
           };
         });
