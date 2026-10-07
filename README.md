@@ -13,9 +13,10 @@ Two font families in OpenType CFF (.otf) format, each provided in Regular and Bo
 
 ## How It Works
 
-- The font's `cmap` table maps shinjitai codepoints to kyujitai glyphs (`data/chars.tsv`, 456 characters take effect).
-- Word-dependent forms are handled via contextual substitutions appended to the `ccmp` feature (`data/words.tsv`), e.g., 弁当→辨當, 弁論→辯論, 花弁→花瓣, 総合→綜合, 連絡→聯絡.
-- `ccmp` is used so substitutions also function in vertical writing.
+- The fonts now render shinjitai like any Japanese font by default. Kyujitai appears only when the OpenType `trad` feature is on (CSS: `font-variant-east-asian: traditional`). The `cmap` is no longer changed.
+- `trad` is OpenType's "Traditional Forms" feature. What it substitutes depends on the font: in Japanese fonts it maps shinjitai to kyujitai; in Kyuji fonts it contains only this project's tables.
+- Inside `trad`, lookups run in this order: the word rules from `data/words.tsv` (handled via contextual substitutions, e.g., 弁当→辨當, 弁論→辯論, 花弁→花瓣, 総合→綜合, 連絡→聯絡), then the per-character swap from `data/chars.tsv` (456 characters).
+- Requested features also apply in vertical text.
 
 ## Limitations
 
@@ -24,7 +25,7 @@ Two font families in OpenType CFF (.otf) format, each provided in Regular and Bo
 - Characters with multiple kyujitai forms that are not present in `data/words.tsv` retain a single form (e.g., standalone 弁 remains 弁).
 - 寧 has no target glyph in Source Han and is left unchanged.
 - Word rules match without word boundaries; entries that misfire were dropped (e.g., 日食 in 毎日食べた, 月食, 一丁 in 一丁目).
-- If a page names only Latin fonts (e.g. font-family: Arial), the browser renders kanji with the operating system's fallback font, so they are not converted.
+- Browser default fonts: setting them to Kyuji (step 1 of Browser Setup) matters because characters a page's named fonts lack fall back to them; e.g. a page naming only Arial gets its kanji from the default Japanese font. In Firefox with Kyuji defaults, such kanji were converted with the word rules; in Chrome without Kyuji defaults they fell back to Hiragino's own trad.
 - Kyuji has only Regular and Bold, so very light or very heavy page fonts get Regular or Bold kanji.
 - Pages that use only generic families (serif/sans-serif) are drawn entirely in the browser's default fonts (which the Browser Setup step sets to Kyuji).
 
@@ -39,8 +40,9 @@ Two font families in OpenType CFF (.otf) format, each provided in Regular and Bo
 ## Browser Setup
 
 1. **Default fonts:** Set the browser's default Japanese fonts (serif → Kyuji Mincho, sans-serif → Kyuji Gothic) for pages using generic font families.
-2. **Userscript:** Install `kyuji-font.user.js` in a userscript manager (Tampermonkey, Violentmonkey). The userscript (v0.2.0) keeps the page's own fonts and draws only the affected kanji from the Kyuji fonts: the kanji in `data/chars.tsv` plus every kanji appearing in `data/words.tsv` (789 characters). Word-rule kanji must come from the same font or the contextual rule cannot see its neighbour, so some unchanged kanji (e.g. 明, 論) are also drawn by Kyuji.
-   - **How:** It adds `FontFace` entries under the page's own family names, limited with `unicode-range` to those kanji.
+2. **Userscript:** Install `kyuji-font.user.js` in a userscript manager (Tampermonkey, Violentmonkey). The userscript (v0.3.0) keeps the page's own fonts and draws only the affected kanji from the Kyuji fonts: the kanji in `data/chars.tsv` plus every kanji appearing in `data/words.tsv` (789 characters). Word-rule kanji must come from the same font or the contextual rule cannot see its neighbour, so some unchanged kanji (e.g. 明, 論) are also drawn by Kyuji.
+   - **How:** It adds `FontFace` entries under the page's own family names, limited with `unicode-range` to those kanji. The userscript now also adds a global rule that turns on `font-variant-east-asian: traditional` for every element. That is what switches the Kyuji fonts, including when they are the browser's default fonts, so disabling the userscript brings back shinjitai on every page.
+   - Because that rule is global, page fonts that have their own 'trad' feature (e.g. Hiragino) also switch for characters they draw themselves; such fonts have no word rules (弁 becomes 辨 in every word). On Chinese pages, a font whose 'trad' maps simplified to traditional Chinese could switch too. The rule also overrides any `font-variant-east-asian` value the page sets.
    - **Installed system fonts** (Hiragino, Yu Gothic/Mincho, Meiryo, MS Gothic/Mincho, Osaka, IPAex): Defining a face under an installed font's name hides that font, so the script first re-adds the original faces by PostScript name, split into weight bands, and adds the Kyuji kanji in the same bands. macOS PostScript names were read from CoreText; Windows names are the commonly documented ones and have not been verified.
    - **Web fonts the page declares** (found through `document.fonts`): The script adds a Kyuji face with the same weight/style/stretch descriptors as each of the page's faces.
    - Families not in that list and not declared by the page are left untouched.
@@ -65,7 +67,7 @@ nix develop
 Manual build:
 
 ```sh
-python3 build.py SourceHanSerif.ttc 10 "Kyuji Mincho" 0.1.0 KyujiMincho-Regular.otf
+python3 build.py SourceHanSerif.ttc 10 "Kyuji Mincho" 0.3.0 KyujiMincho-Regular.otf
 ```
 
 ## Editing Tables
