@@ -1,8 +1,9 @@
 """Build a kyujitai display font from one face of a Source Han super OTC.
 
-Text keeps its shinjitai codepoints. The cmap points each shinjitai codepoint
-at the kyujitai glyph (data/chars.tsv), and contextual lookups appended to
-ccmp pick word-dependent forms such as 弁当→辨當 and 弁論→辯論 (data/words.tsv).
+The font draws shinjitai like any Japanese font. Its 'trad' feature (CSS
+font-variant-east-asian: traditional) switches to kyujitai: word-dependent
+forms such as 弁当→辨當 and 弁論→辯論 first (data/words.tsv), then one glyph
+per character (data/chars.tsv). Text keeps its shinjitai codepoints either way.
 
 usage: build.py SOURCE.ttc FACE_INDEX "Family Name" VERSION OUT.otf
 """
@@ -25,25 +26,15 @@ def read_tsv(name):
     return rows
 
 
-def remap_cmap(font, chars):
-    orig = font.getBestCmap()
-    remap = {ord(k): orig[ord(v)] for k, v in chars
-             if ord(k) in orig and ord(v) in orig and orig[ord(k)] != orig[ord(v)]}
-    for table in font['cmap'].tables:
-        if table.isUnicode():
-            for cp, glyph in remap.items():
-                if cp in table.cmap:
-                    table.cmap[cp] = glyph
-    return remap
-
-
-def word_feature(cmap, words):
+def trad_feature(cmap, chars, words):
     def g(c):
         return cmap.get(ord(c))
 
     def ref(glyph):
         return '\\' + glyph.removeprefix('cid')  # CID-keyed: \12345
 
+    # Lookups run in order on the shinjitai glyphs: word forms, then the
+    # per-character swap, which also converts what the word lookups left.
     first, second = [], []  # rewrite k[0] (look right) / k[1] (look left)
     for k, v in words:
         if not all(map(g, k + v)):
@@ -54,10 +45,13 @@ def word_feature(cmap, words):
             # the left neighbour may already have been rewritten by the first lookup
             left = ' '.join(ref(x) for x in sorted({g(k[0]), g(v[0])}))
             second.append(f"  sub [{left}] {ref(g(k[1]))}' by {ref(g(v[1]))};")
+    single = [f'  sub {ref(g(k))} by {ref(g(v))};' for k, v in chars
+              if g(k) and g(v) and g(k) != g(v)]
     fea = ['lookup KyujiWordFirst {', *first, '} KyujiWordFirst;',
            'lookup KyujiWordSecond {', *second, '} KyujiWordSecond;',
-           'feature ccmp { lookup KyujiWordFirst; lookup KyujiWordSecond; } ccmp;']
-    return '\n'.join(fea), len(first) + len(second)
+           'lookup KyujiChars {', *single, '} KyujiChars;',
+           'feature trad { lookup KyujiWordFirst; lookup KyujiWordSecond; lookup KyujiChars; } trad;']
+    return '\n'.join(fea), len(single), len(first) + len(second)
 
 
 def shift_lookup_refs(obj, offset, seen):
@@ -71,7 +65,7 @@ def shift_lookup_refs(obj, offset, seen):
             shift_lookup_refs(item, offset, seen)
 
 
-def append_ccmp(font, fea):
+def append_feature(font, fea, tag):
     """feaLib replaces GSUB wholesale; build aside and merge into the original."""
     orig = font['GSUB']
     addOpenTypeFeaturesFromString(font, fea, tables=['GSUB'])
@@ -85,22 +79,22 @@ def append_ccmp(font, fea):
     old.LookupList.Lookup += new.LookupList.Lookup
     old.LookupList.LookupCount = len(old.LookupList.Lookup)
 
-    feat = next(r for r in new.FeatureList.FeatureRecord if r.FeatureTag == 'ccmp')
+    feat = next(r for r in new.FeatureList.FeatureRecord if r.FeatureTag == tag)
     ours = [i + offset for i in feat.Feature.LookupListIndex]
     feat.Feature.LookupListIndex = ours
 
-    # Shapers use only the first ccmp a language system lists, so extend the
-    # existing ones. ccmp rather than calt: it also runs in vertical text.
+    # Shapers use only the first record of a tag a language system lists, so
+    # extend existing ones.
     records = old.FeatureList.FeatureRecord
     for r in records:
-        if r.FeatureTag == 'ccmp':
+        if r.FeatureTag == tag:
             r.Feature.LookupListIndex += ours
             r.Feature.LookupCount = len(r.Feature.LookupListIndex)
     added = None
     for script in old.ScriptList.ScriptRecord:
         langs = [script.Script.DefaultLangSys] + [r.LangSys for r in script.Script.LangSysRecord]
         for ls in filter(None, langs):
-            if any(records[i].FeatureTag == 'ccmp' for i in ls.FeatureIndex):
+            if any(records[i].FeatureTag == tag for i in ls.FeatureIndex):
                 continue
             if added is None:
                 records.append(feat)
@@ -151,14 +145,13 @@ def subset_to_face(font):
 def main():
     src, index, family, version, out = sys.argv[1:]
     font = TTCollection(src).fonts[int(index)]
-    remapped = remap_cmap(font, read_tsv('chars.tsv'))
-    fea, rules = word_feature(font.getBestCmap(), read_tsv('words.tsv'))
-    append_ccmp(font, fea)
+    fea, swaps, rules = trad_feature(font.getBestCmap(), read_tsv('chars.tsv'), read_tsv('words.tsv'))
+    append_feature(font, fea, 'trad')
     rename(font, family, version)
     subset_to_face(font)
     font.recalcTimestamp = False  # reproducible output
     font.save(out)
-    print(f'{out}: {len(remapped)} chars, {rules} word rules')
+    print(f'{out}: {swaps} chars, {rules} word rules')
 
 
 if __name__ == '__main__':

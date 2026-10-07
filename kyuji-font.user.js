@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kyuji Font
 // @namespace    https://github.com/gapul/kyuji-font
-// @version      0.2.0
+// @version      0.3.0
 // @description  Render Japanese pages in kyujitai with the locally installed Kyuji Mincho / Kyuji Gothic, keeping the page's own fonts for everything else. Text itself is left untouched.
 // @match        *://*/*
 // @run-at       document-start
@@ -109,6 +109,13 @@
         { weight: face.weight, style: face.style, stretch: face.stretch, unicodeRange: range });
     }
   };
+
+  // The Kyuji fonts draw shinjitai until trad is on. Turning it on everywhere is
+  // what switches them, including when they are the browser's default fonts, so
+  // disabling this script brings back shinjitai on every page.
+  const trad = document.createElement('style');
+  trad.textContent = '*, *::before, *::after { font-variant-east-asian: traditional !important; }';
+  document.documentElement.appendChild(trad);
 
   const declared = new Set([...document.fonts].map((f) => f.family.replace(/^["']|["']$/g, '')));
   for (const name of [...Object.keys(SYSTEM), ...Object.keys(ALIASES)]) {

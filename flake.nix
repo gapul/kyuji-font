@@ -7,7 +7,7 @@
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
       forAll = f: nixpkgs.lib.genAttrs systems (s: f nixpkgs.legacyPackages.${s});
-      version = "0.2.0";
+      version = "0.3.0";
     in
     {
       packages = forAll (pkgs:

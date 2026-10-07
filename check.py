@@ -1,4 +1,4 @@
-"""Shape sample text with HarfBuzz and assert the kyujitai glyphs come out.
+"""Shape sample text with HarfBuzz: kyujitai with trad on, untouched without it.
 
 usage: check.py FONT.otf ...   (needs hb-shape on PATH)
 """
@@ -14,14 +14,14 @@ CASES = {
     '花弁': '花瓣',
     '総合連絡': '綜合聯絡',
     '侵食': '侵蝕',
-    '毎日食べた一丁目': '每日食べた一丁目',  # no word rule may fire here
+    '毎日食べた一丁目': '每日⻝べた一丁目',  # 日食 must not fire; 食 itself maps to ⻝
 }
 
 
-def shape(font_path, text, direction):
+def shape(font_path, text, direction, features=''):
     out = subprocess.run(
         ['hb-shape', '--no-glyph-names', '--no-positions', '--no-clusters',
-         f'--direction={direction}', font_path, text],
+         f'--direction={direction}', f'--features={features}', font_path, text],
         capture_output=True, text=True, check=True).stdout
     return [int(g) for g in out.strip('[]\n').split('|')]
 
@@ -34,8 +34,12 @@ def main():
         for text, want in CASES.items():
             # the expected glyph of each kyujitai char is what its own codepoint maps to
             expect = [font.getGlyphID(cmap[ord(c)]) for c in want]
+            plain = [font.getGlyphID(cmap[ord(c)]) for c in text]
+            if shape(path, text, 'ltr') != plain:
+                failed += 1
+                print(f'FAIL {path}: {text} changed without trad')
             for direction in ('ltr', 'ttb'):
-                got = shape(path, text, direction)
+                got = shape(path, text, direction, 'trad')
                 if direction == 'ttb':
                     # vert may swap kana/punctuation; compare kanji positions only
                     pairs = [(g, e) for g, e, c in zip(got, expect, want) if '㐀' <= c <= '鿿']
